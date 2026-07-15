@@ -1,0 +1,40 @@
+# End-to-end test stack: two secrets-engine hosts running the exact same plugin
+# binary — HashiCorp Vault and OpenBao. The gpg engine is self-contained (it
+# stores key material in the host's own barrier storage), so there is no
+# external service to stand up. Bind mounts use ":z" so they work under SELinux.
+services:
+  vault:
+    image: hashicorp/vault:1.18
+    cap_add: [IPC_LOCK]
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_ADDR: http://127.0.0.1:8200
+      VAULT_TOKEN: root
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-config=/vault/vault.hcl"]
+    volumes:
+      - ../dist:/vault/plugins:ro,z
+      - ./vault/vault.hcl:/vault/vault.hcl:ro,z
+    ports: ["8200:8200"]
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  openbao:
+    image: openbao/openbao:latest
+    cap_add: [IPC_LOCK]
+    environment:
+      BAO_DEV_ROOT_TOKEN_ID: root
+      BAO_ADDR: http://127.0.0.1:8200
+      BAO_TOKEN: root
+    command: ["server", "-dev", "-dev-listen-address=0.0.0.0:8200", "-config=/openbao/bao.hcl"]
+    volumes:
+      - ../dist:/openbao/plugins:ro,z
+      - ./openbao/bao.hcl:/openbao/bao.hcl:ro,z
+    ports: ["8300:8200"]
+    healthcheck:
+      test: ["CMD", "bao", "status", "-address=http://127.0.0.1:8200"]
+      interval: 3s
+      timeout: 3s
+      retries: 20

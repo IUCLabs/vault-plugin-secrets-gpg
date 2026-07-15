@@ -1,0 +1,5 @@
+/dist/
+/vault-plugin-secrets-gpg
+*.out
+*.test
+.env
