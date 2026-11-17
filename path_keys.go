@@ -29,7 +29,7 @@ func pathKeys(b *gpgBackend) *framework.Path {
 			},
 			"identity": {
 				Type:        framework.TypeString,
-				Description: `OpenPGP User ID for the key, e.g. "Ben Vincent <ben@unkin.net>". Defaults to the key name.`,
+				Description: `OpenPGP User ID for the key, e.g. "Jane Doe <jane@example.com>". Defaults to the key name.`,
 			},
 			"exportable": {
 				Type:        framework.TypeBool,

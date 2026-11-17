@@ -53,7 +53,7 @@ run_engine() {
 
   # --- generate a key ---
   local pub
-  pub="$(ex write -field=public_key "${MOUNT}/keys/app" algorithm=rsa-2048 identity='App <app@unkin.net>')"
+  pub="$(ex write -field=public_key "${MOUNT}/keys/app" algorithm=rsa-2048 identity='App <app@example.com>')"
   printf '%s' "${pub}" | grep -q 'BEGIN PGP PUBLIC KEY BLOCK' || fail "[${engine}] no armored public key returned"
   green "[${engine}] key generated; public key exported"
 

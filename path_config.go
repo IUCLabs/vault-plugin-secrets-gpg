@@ -22,7 +22,7 @@ func pathKeyConfig(b *gpgBackend) *framework.Path {
 			},
 			"min_decryption_version": {
 				Type:        framework.TypeInt,
-				Description: "Minimum key version usable for decryption and verification. Versions below this can no longer open data.",
+				Description: "Minimum key version usable for decryption. Versions below this can no longer open data.",
 			},
 			"deletion_allowed": {
 				Type:        framework.TypeBool,

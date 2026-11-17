@@ -41,7 +41,7 @@ func createKey(t *testing.T, b logical.Backend, s logical.Storage, name, algorit
 	t.Helper()
 	return do(t, b, s, logical.CreateOperation, "keys/"+name, map[string]interface{}{
 		"algorithm": algorithm,
-		"identity":  "Test Key <test@unkin.net>",
+		"identity":  "Test Key <test@example.com>",
 	})
 }
 
@@ -169,7 +169,7 @@ func TestExportImportRoundtrip(t *testing.T) {
 
 	do(t, b, s, logical.CreateOperation, "keys/src", map[string]interface{}{
 		"algorithm":  "ed25519",
-		"identity":   "Exportable <e@unkin.net>",
+		"identity":   "Exportable <e@example.com>",
 		"exportable": true,
 	})
 

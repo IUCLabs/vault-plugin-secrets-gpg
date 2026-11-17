@@ -1,4 +1,4 @@
-module git.unkin.net/unkin/vault-plugin-secrets-gpg
+module github.com/IUCLabs/vault-plugin-secrets-gpg
 
 go 1.25.0
 

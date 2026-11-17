@@ -24,8 +24,8 @@ export PACKAGE_RELEASE="1"
 export PACKAGE_ARCH="amd64"
 export PACKAGE_PLATFORM="linux"
 export PACKAGE_DESCRIPTION="Vault/OpenBao secrets engine for GPG/OpenPGP keys (sign/verify/encrypt/decrypt)"
-export PACKAGE_MAINTAINER="Ben Vincent <ben@unkin.net>"
-export PACKAGE_HOMEPAGE="https://git.unkin.net/unkin/vault-plugin-secrets-gpg"
+export PACKAGE_MAINTAINER="IUCLabs"
+export PACKAGE_HOMEPAGE="https://github.com/IUCLabs/vault-plugin-secrets-gpg"
 export PACKAGE_LICENSE="MIT"
 
 build_flavor() {

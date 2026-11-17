@@ -7,7 +7,7 @@ import (
 	"github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/sdk/plugin"
 
-	gpg "git.unkin.net/unkin/vault-plugin-secrets-gpg"
+	gpg "github.com/IUCLabs/vault-plugin-secrets-gpg"
 )
 
 func main() {

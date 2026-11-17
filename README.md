@@ -1,57 +1,62 @@
 # vault-plugin-secrets-gpg
 
-A HashiCorp Vault / OpenBao secrets engine that manages **GPG / OpenPGP keys**
-and performs **signing, verification, encryption and decryption** with them —
-the transit engine, but the key material is OpenPGP.
+A secrets engine for HashiCorp Vault and OpenBao that manages OpenPGP (GPG)
+keys and signs, verifies, encrypts and decrypts with them. Think of it as the
+transit engine, but the keys are OpenPGP keys.
 
-Keys are generated and stored inside Vault's own barrier storage (seal-wrapped
-under `key/`) and the private key never leaves Vault unless a key is explicitly
-marked `exportable`. Each named key is **versioned**: rotating adds a new
-OpenPGP entity, while older versions are retained so archived signatures still
-verify and old ciphertext still decrypts.
+### Why use this plugin?
 
-The armored public key the engine hands back is a standard, importable OpenPGP
-key, so `gpg`, [`pass`](https://www.passwordstore.org/) and friends can encrypt
-to it while the private key stays in Vault and decryption is delegated back to
-`decrypt/<name>`.
+Private keys are generated and stored in Vault's barrier storage. They never
+leave Vault unless you mark a key `exportable`. The engine hands out a
+standard armored public key, so `gpg`, [`pass`](https://www.passwordstore.org/)
+and other OpenPGP tools can encrypt to the key. Decryption goes back through
+Vault. Keys are versioned: when you rotate a key, older versions stay
+available, so old signatures still verify and old ciphertext still decrypts.
 
+To manage the engine's mounts and keys from Terraform or OpenTofu, use
+[terraform-provider-vault-secrets-gpg](https://github.com/IUCLabs/terraform-provider-vault-secrets-gpg).
+
+## Requirements
+
+- HashiCorp Vault or OpenBao. The same binary works on both. The end-to-end
+  tests run against Vault 1.18 and the latest OpenBao release.
+- Go 1.25+ (only if you build from source)
+
+## Installation
+
+Download a binary from the
+[releases page](https://github.com/IUCLabs/vault-plugin-secrets-gpg/releases),
+or build one:
+
+```sh
+make build   # -> dist/vault-plugin-secrets-gpg
 ```
-gpg / pass  ──encrypt to public key──▶  binary .gpg
-    │                                       │
-    │ import public key                     │ decrypt/<name>
-    ▼                                       ▼
-export/public-key/<name>  ◀── Vault ──▶  private key (never leaves the barrier)
+
+Copy the binary into the server's `plugin_directory`, then register it in the
+plugin catalog and enable the engine. On OpenBao, run the same commands with
+`bao` in place of `vault`.
+The example assumes `plugin_directory = "/etc/vault/plugins"`; use the
+directory set in your server config.
+
+```sh
+SHA256=$(sha256sum /etc/vault/plugins/vault-plugin-secrets-gpg | cut -d' ' -f1)
+vault plugin register -sha256="$SHA256" secret vault-plugin-secrets-gpg
+vault secrets enable -path=gpg vault-plugin-secrets-gpg
 ```
-
-## Paths
-
-| Path | Purpose |
-|------|---------|
-| `keys/<name>` (write/read/delete, list `keys/`) | generate a key (`rsa-2048`, `rsa-3072`, `rsa-4096`, `ed25519`); read metadata + armored public key |
-| `keys/<name>/config` | set `min_decryption_version`, `deletion_allowed`, `exportable` |
-| `keys/<name>/rotate` | add a new version (older versions kept for decrypt/verify) |
-| `keys/<name>/import` | import an existing armored private key |
-| `export/<public-key\|private-key>/<name>[/<version>]` | export armored key material |
-| `sign/<name>` / `verify/<name>` | detached OpenPGP signature over base64 input |
-| `encrypt/<name>` / `decrypt/<name>` | OpenPGP encrypt to / decrypt with the key |
-
-Creating a key is **idempotent** — writing `keys/<name>` again returns the
-existing key rather than regenerating it. Deletion is refused unless
-`deletion_allowed=true` is set via `keys/<name>/config`.
 
 ## Usage
 
+The engine has no mount-level configuration. Each key holds its own settings
+(see [keys](docs/keys.md)).
+
+All binary input and output is base64-encoded.
+
 ```sh
-# register + enable (the plugin_directory must contain the binary)
-sha=$(sha256sum /opt/vault-plugins/vault-plugin-secrets-gpg | cut -d' ' -f1)
-vault plugin register -sha256=$sha secret vault-plugin-secrets-gpg
-vault secrets enable -path=gpg vault-plugin-secrets-gpg
+# create a key (repeating the write returns the existing key)
+vault write gpg/keys/app algorithm=rsa-4096 identity="App <app@example.com>"
+vault read gpg/keys/app
 
-# generate a key
-vault write gpg/keys/app algorithm=rsa-4096 identity="App <app@unkin.net>"
-vault read  gpg/keys/app                       # metadata + armored public key
-
-# sign / verify (input and output are base64 / armored)
+# sign / verify
 sig=$(vault write -field=signature gpg/sign/app input=$(base64 <<<"ship it"))
 vault write -field=valid gpg/verify/app input=$(base64 <<<"ship it") signature="$sig"
 
@@ -59,42 +64,40 @@ vault write -field=valid gpg/verify/app input=$(base64 <<<"ship it") signature="
 ct=$(vault write -field=ciphertext gpg/encrypt/app plaintext=$(base64 <<<"secret"))
 vault write -field=plaintext gpg/decrypt/app ciphertext="$ct" | base64 -d
 
-# rotate; old ciphertext still decrypts
+# rotate; ciphertext from older versions still decrypts
 vault write gpg/keys/app/rotate
 ```
 
-## Using it with `pass`
+### With `pass`
 
-The engine holds the private key; `pass`/`gpg` only need the **public** key to
-encrypt, and delegate decryption back to Vault.
+`pass` needs only the public key to encrypt. Decryption goes through Vault.
 
 ```sh
-# import the engine's public key into your gpg keyring
 vault read -field=public_key gpg/keys/app | gpg --import
-fpr=$(vault read -field=fingerprint gpg/keys/app)
+pass init "$(vault read -field=fingerprint gpg/keys/app)"
+pass insert email/example
 
-# initialise a password store against it
-pass init "$fpr"
-pass insert email/example          # writes ~/.password-store/email/example.gpg (binary OpenPGP)
-
-# decrypt an entry through Vault (decrypt accepts binary ciphertext directly)
 vault write -field=plaintext gpg/decrypt/app \
   ciphertext=$(base64 -w0 ~/.password-store/email/example.gpg) | base64 -d
 ```
 
-`decrypt/<name>` auto-detects ASCII-armored vs raw-binary input, so the binary
-`.gpg` files `pass` writes work without conversion. A thin `gpg`/`pass`
-wrapper that routes decryption to Vault automatically can be layered on top.
+## Documentation
 
-## Build
+Full path reference:
+
+- [Keys](docs/keys.md): `keys/`, `keys/:name`, `keys/:name/config`, `keys/:name/rotate`, `keys/:name/import`
+- [Export](docs/export.md): `export/:type/:name(/:version)`
+- [Sign and verify](docs/sign-verify.md): `sign/:name`, `verify/:name`
+- [Encrypt and decrypt](docs/encrypt-decrypt.md): `encrypt/:name`, `decrypt/:name`
+
+## Development
 
 ```sh
-make build      # -> dist/vault-plugin-secrets-gpg
-make test lint  # go test -race / go vet
-make e2e        # full lifecycle against Vault + OpenBao in Docker
-make rpm        # vault + openbao RPM flavours
+make test   # unit tests, including gpg/pass interop when those binaries exist
+make lint
+make e2e    # full lifecycle against Vault and OpenBao in Docker
 ```
 
-CI (Woodpecker) runs pre-commit/build/lint/test on PRs and builds+publishes the
-RPMs on a `v*` tag. The unit tests include real-`gpg` and real-`pass` interop
-checks (skipped automatically when those binaries are absent).
+## License
+
+[MIT](LICENSE)
