@@ -24,7 +24,7 @@ To manage the engine's mounts and keys from Terraform or OpenTofu, use
 
 ## Installation
 
-Download a binary from the
+Install the x86_64 RPM (vault or openbao flavour) from the
 [releases page](https://github.com/IUCLabs/vault-plugin-secrets-gpg/releases),
 or build one:
 
