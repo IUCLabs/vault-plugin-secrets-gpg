@@ -32,14 +32,14 @@ or build one:
 make build   # -> dist/vault-plugin-secrets-gpg
 ```
 
-Copy the binary into the server's `plugin_directory`, then register it in the
+The RPM installs the binary to `/usr/libexec/vault-plugins` (openbao flavour:
+`/usr/libexec/openbao-plugins`); point the server's `plugin_directory` there, or
+copy a built binary into your configured directory. Then register it in the
 plugin catalog and enable the engine. On OpenBao, run the same commands with
 `bao` in place of `vault`.
-The example assumes `plugin_directory = "/etc/vault/plugins"`; use the
-directory set in your server config.
 
 ```sh
-SHA256=$(sha256sum /etc/vault/plugins/vault-plugin-secrets-gpg | cut -d' ' -f1)
+SHA256=$(sha256sum /usr/libexec/vault-plugins/vault-plugin-secrets-gpg | cut -d' ' -f1)
 vault plugin register -sha256="$SHA256" secret vault-plugin-secrets-gpg
 vault secrets enable -path=gpg vault-plugin-secrets-gpg
 ```
