@@ -24,24 +24,98 @@ To manage the engine's mounts and keys from Terraform or OpenTofu, use
 
 ## Installation
 
-Install the x86_64 RPM (vault or openbao flavour) from the
-[releases page](https://github.com/IUCLabs/vault-plugin-secrets-gpg/releases),
-or build one:
+Release assets download through artifactapi's GitHub proxy, which serves
+`https://artifactapi.k8s.syd1.au.unkin.net/api/v1/remote/github/IUCLabs/vault-plugin-secrets-gpg/releases/download/<tag>/<file>`.
+Each method below ends with `SHA256` set for [registration](#register-and-enable).
+With OpenBao, use `bao` in place of `vault`.
 
 ```sh
-make build   # -> dist/vault-plugin-secrets-gpg
+TAG=vX.Y.Z  # the release to install
+V=${TAG#v}
+BASE=https://artifactapi.k8s.syd1.au.unkin.net/api/v1/remote/github/IUCLabs/vault-plugin-secrets-gpg/releases/download/$TAG
 ```
 
-The RPM installs the binary to `/usr/libexec/vault-plugins` (openbao flavour:
-`/usr/libexec/openbao-plugins`); point the server's `plugin_directory` there, or
-copy a built binary into your configured directory. Then register it in the
-plugin catalog and enable the engine. On OpenBao, run the same commands with
-`bao` in place of `vault`.
+### RPM
+
+`vault-plugin-secrets-gpg` installs `/usr/libexec/vault-plugins/vault-plugin-secrets-gpg`;
+`openbao-plugin-secrets-gpg` installs it in `/usr/libexec/openbao-plugins/`.
+Set the server's `plugin_directory` to that directory.
 
 ```sh
+dnf install vault-plugin-secrets-gpg  # from a yum repo carrying it, or from the release:
+dnf install "$BASE/vault-plugin-secrets-gpg-$V-1.x86_64.rpm"  # openbao-plugin-secrets-gpg-$V-1.x86_64.rpm for OpenBao
+
 SHA256=$(sha256sum /usr/libexec/vault-plugins/vault-plugin-secrets-gpg | cut -d' ' -f1)
+```
+
+### Released binary
+
+`vault-plugin-secrets-gpg_<version>_SHA256SUMS` lists the binary and the RPMs, and
+`SHA256SUMS.sig` is its detached signature by the IUCLabs release GPG key.
+
+```sh
+curl -fLO "$BASE/vault-plugin-secrets-gpg_${V}_linux_amd64"
+curl -fLO "$BASE/vault-plugin-secrets-gpg_${V}_SHA256SUMS"
+curl -fLO "$BASE/vault-plugin-secrets-gpg_${V}_SHA256SUMS.sig"
+gpg --verify "vault-plugin-secrets-gpg_${V}_SHA256SUMS.sig" "vault-plugin-secrets-gpg_${V}_SHA256SUMS"
+sha256sum --check --ignore-missing "vault-plugin-secrets-gpg_${V}_SHA256SUMS"
+
+install -m 0755 "vault-plugin-secrets-gpg_${V}_linux_amd64" <plugin_directory>/vault-plugin-secrets-gpg
+SHA256=$(sha256sum <plugin_directory>/vault-plugin-secrets-gpg | cut -d' ' -f1)
+```
+
+### Kubernetes image volume
+
+`ghcr.io/iuclabs/vault-plugin-secrets-gpg:<tag>` is a `FROM scratch` image holding only
+`/vault-plugin-secrets-gpg`. Mount it read-only into the Vault/OpenBao container with an
+[image volume](https://kubernetes.io/docs/concepts/storage/volumes/#image):
+Kubernetes 1.31+ with the `ImageVolume` feature gate (beta, on by default from
+1.33). Vault and OpenBao only run a binary that sits directly in
+`plugin_directory`, not in a subdirectory, so mount the file itself with
+`subPath`, which on image volumes needs 1.33+.
+
+```yaml
+spec:
+  containers:
+    - name: vault
+      volumeMounts:
+        - name: plugin-gpg
+          mountPath: /vault/plugins/vault-plugin-secrets-gpg  # <plugin_directory>/vault-plugin-secrets-gpg
+          subPath: vault-plugin-secrets-gpg
+          readOnly: true
+  volumes:
+    - name: plugin-gpg
+      image:
+        reference: ghcr.io/iuclabs/vault-plugin-secrets-gpg:vX.Y.Z
+        pullPolicy: IfNotPresent
+```
+
+The image holds the released binary, so its sha256 is the `linux_amd64` line
+of `SHA256SUMS`:
+
+```sh
+SHA256=$(curl -fsSL "$BASE/vault-plugin-secrets-gpg_${V}_SHA256SUMS" | awk '/_linux_amd64$/ {print $1}')
+```
+
+### From source
+
+```sh
+make build  # writes ./dist/vault-plugin-secrets-gpg
+```
+
+Copy it into `plugin_directory` and take `SHA256` from `sha256sum` as above.
+
+### Register and enable
+
+```sh
 vault plugin register -sha256="$SHA256" secret vault-plugin-secrets-gpg
 vault secrets enable -path=gpg vault-plugin-secrets-gpg
+```
+
+After replacing the binary, register the new sha256 and reload the plugin:
+
+```sh
+vault write sys/plugins/reload/backend plugin=vault-plugin-secrets-gpg
 ```
 
 ## Usage
